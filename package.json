@@ -1,0 +1,40 @@
+{
+  "name": "@uniswap/liquidity-staker",
+  "version": "1.0.2",
+  "author": "Noah Zinsmeister",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Uniswap/liquidity-staker"
+  },
+  "files": [
+    "build"
+  ],
+  "engines": {
+    "node": ">=10"
+  },
+  "scripts": {
+    "precompile": "rimraf ./build/",
+    "compile": "waffle",
+    "pretest": "yarn compile",
+    "test": "mocha",
+    "lint": "prettier ./test/**/*.ts --check",
+    "prepublishOnly": "yarn test"
+  },
+  "dependencies": {
+    "openzeppelin-solidity-2.3.0": "npm:openzeppelin-solidity@2.3.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.2.12",
+    "@types/mocha": "^8.0.3",
+    "@uniswap/v2-core": "^1.0.1",
+    "chai": "^4.2.0",
+    "ethereum-waffle": "^3.1.0",
+    "ethereumjs-util": "^7.0.5",
+    "mocha": "^8.1.3",
+    "prettier": "^2.1.1",
+    "rimraf": "^3.0.2",
+    "solc": "0.5.16",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.0.2"
+  }
+}
