@@ -15,7 +15,7 @@ describe('StakingRewards', () => {
       gasLimit: 9999999,
     },
   })
-  const [wallet, staker] = provider.getWallets()
+  const [wallet, staker, secondStaker] = provider.getWallets()
   const loadFixture = createFixtureLoader([wallet], provider)
 
   let stakingRewards: Contract
@@ -64,6 +64,7 @@ describe('StakingRewards', () => {
     expect(stakeEndTime).to.be.eq(endTime)
 
     const rewardAmount = await rewardsToken.balanceOf(staker.address)
+    expect(reward.sub(rewardAmount).lte(reward.div(10000))).to.be.true // ensure result is within .01%
     expect(rewardAmount).to.be.eq(reward.div(REWARDS_DURATION).mul(REWARDS_DURATION))
   })
 
@@ -89,6 +90,43 @@ describe('StakingRewards', () => {
     expect(stakeEndTime).to.be.eq(endTime)
 
     const rewardAmount = await rewardsToken.balanceOf(staker.address)
+    expect(reward.div(2).sub(rewardAmount).lte(reward.div(2).div(10000))).to.be.true // ensure result is within .01%
     expect(rewardAmount).to.be.eq(reward.div(REWARDS_DURATION).mul(endTime.sub(stakeStartTime)))
+  }).retries(2) // TODO investigate flakiness
+
+  it('notifyRewardAmount: two stakers', async () => {
+    // stake with first staker
+    const stake = expandTo18Decimals(2)
+    await stakingToken.transfer(staker.address, stake)
+    await stakingToken.connect(staker).approve(stakingRewards.address, stake)
+    await stakingRewards.connect(staker).stake(stake)
+
+    const { startTime, endTime } = await start(reward)
+
+    // fast-forward ~halfway through the reward window
+    await mineBlock(provider, startTime.add(endTime.sub(startTime).div(2)).toNumber())
+
+    // stake with second staker
+    await stakingToken.transfer(secondStaker.address, stake)
+    await stakingToken.connect(secondStaker).approve(stakingRewards.address, stake)
+    await stakingRewards.connect(secondStaker).stake(stake)
+
+    // fast-forward past the reward window
+    await mineBlock(provider, endTime.add(1).toNumber())
+
+    // unstake
+    await stakingRewards.connect(staker).exit()
+    const stakeEndTime: BigNumber = await stakingRewards.lastUpdateTime()
+    expect(stakeEndTime).to.be.eq(endTime)
+    await stakingRewards.connect(secondStaker).exit()
+
+    const rewardAmount = await rewardsToken.balanceOf(staker.address)
+    const secondRewardAmount = await rewardsToken.balanceOf(secondStaker.address)
+    const totalReward = rewardAmount.add(secondRewardAmount)
+
+    // ensure results are within .01%
+    expect(reward.sub(totalReward).lte(reward.div(10000))).to.be.true
+    expect(totalReward.mul(3).div(4).sub(rewardAmount).lte(totalReward.mul(3).div(4).div(10000)))
+    expect(totalReward.div(4).sub(secondRewardAmount).lte(totalReward.div(4).div(10000)))
   })
 })
