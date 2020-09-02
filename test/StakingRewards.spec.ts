@@ -18,9 +18,13 @@ describe('StakingRewards', () => {
   const loadFixture = createFixtureLoader([wallet], provider)
 
   let stakingRewards: Contract
+  let rewardsToken: Contract
+  let stakingToken: Contract
   beforeEach(async () => {
     const fixture = await loadFixture(stakingRewardsFixture)
     stakingRewards = fixture.stakingRewards
+    rewardsToken = fixture.rewardsToken
+    stakingToken = fixture.stakingToken
   })
 
   it('test', async () => {
