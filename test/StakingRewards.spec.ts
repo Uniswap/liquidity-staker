@@ -33,19 +33,45 @@ describe('StakingRewards', () => {
     expect(rewardsDuration).to.be.eq(REWARDS_DURATION)
   })
 
-  it('notifyRewardAmount', async () => {
+  const reward = expandTo18Decimals(100)
+  async function start(reward: BigNumber): Promise<{ startTime: BigNumber; endTime: BigNumber }> {
     // send reward to the contract
-    const reward = expandTo18Decimals(100)
     await rewardsToken.transfer(stakingRewards.address, reward)
     // must be called by rewardsDistribution
     await stakingRewards.notifyRewardAmount(reward)
 
-    const rewardsStartTime: BigNumber = await stakingRewards.lastUpdateTime()
-    const periodFinish: BigNumber = await stakingRewards.periodFinish()
-    expect(periodFinish).to.be.eq(rewardsStartTime.add(REWARDS_DURATION))
+    const startTime: BigNumber = await stakingRewards.lastUpdateTime()
+    const endTime: BigNumber = await stakingRewards.periodFinish()
+    expect(endTime).to.be.eq(startTime.add(REWARDS_DURATION))
+    return { startTime, endTime }
+  }
+
+  it('notifyRewardAmount: full', async () => {
+    // stake with staker
+    const stake = expandTo18Decimals(2)
+    await stakingToken.transfer(staker.address, stake)
+    await stakingToken.connect(staker).approve(stakingRewards.address, stake)
+    await stakingRewards.connect(staker).stake(stake)
+
+    const { endTime } = await start(reward)
+
+    // fast-forward past the reward window
+    await mineBlock(provider, endTime.add(1).toNumber())
+
+    // unstake
+    await stakingRewards.connect(staker).exit()
+    const stakeEndTime: BigNumber = await stakingRewards.lastUpdateTime()
+    expect(stakeEndTime).to.be.eq(endTime)
+
+    const rewardAmount = await rewardsToken.balanceOf(staker.address)
+    expect(rewardAmount).to.be.eq(reward.div(REWARDS_DURATION).mul(REWARDS_DURATION))
+  })
+
+  it('notifyRewardAmount: ~half', async () => {
+    const { startTime, endTime } = await start(reward)
 
     // fast-forward ~halfway through the reward window
-    await mineBlock(provider, rewardsStartTime.add(Math.floor(REWARDS_DURATION / 2)).toNumber())
+    await mineBlock(provider, startTime.add(endTime.sub(startTime).div(2)).toNumber())
 
     // stake with staker
     const stake = expandTo18Decimals(2)
@@ -55,14 +81,14 @@ describe('StakingRewards', () => {
     const stakeStartTime: BigNumber = await stakingRewards.lastUpdateTime()
 
     // fast-forward past the reward window
-    await mineBlock(provider, periodFinish.add(1).toNumber())
+    await mineBlock(provider, endTime.add(1).toNumber())
 
     // unstake
     await stakingRewards.connect(staker).exit()
     const stakeEndTime: BigNumber = await stakingRewards.lastUpdateTime()
-    expect(stakeEndTime).to.be.eq(periodFinish)
+    expect(stakeEndTime).to.be.eq(endTime)
 
     const rewardAmount = await rewardsToken.balanceOf(staker.address)
-    expect(reward.div(REWARDS_DURATION).mul(periodFinish.sub(stakeStartTime))).to.be.eq(rewardAmount)
+    expect(rewardAmount).to.be.eq(reward.div(REWARDS_DURATION).mul(endTime.sub(stakeStartTime)))
   })
 })
