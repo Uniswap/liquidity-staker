@@ -7,7 +7,8 @@
     "precompile": "rimraf ./build/",
     "compile": "waffle",
     "pretest": "yarn compile",
-    "test": "mocha"
+    "test": "mocha",
+    "lint": "prettier ./test/**/*.ts --check"
   },
   "dependencies": {
     "openzeppelin-solidity-2.3.0": "npm:openzeppelin-solidity@2.3.0"
