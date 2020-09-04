@@ -28,7 +28,5 @@ describe('StakingRewardsFactory', () => {
     stakingRewardsFactory = fixture.stakingRewardsFactory
   })
 
-  it('test', async () => {
-    console.log('test me!')
-  })
+  it('test')
 })
