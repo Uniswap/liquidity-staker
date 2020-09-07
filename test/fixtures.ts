@@ -39,7 +39,7 @@ interface StakingRewardsFactoryFixture {
   stakingTokens: Contract[]
   stakingRewardsContracts: Contract[]
   genesis: number
-  reward: BigNumber
+  rewardAmounts: BigNumber[]
   stakingRewardsFactory: Contract
 }
 
@@ -75,14 +75,14 @@ export async function stakingRewardsFactoryFixture(
   // deploy the staking rewards factory
   const { timestamp: now } = await provider.getBlock('latest')
   const genesis = now + 60 * 60
-  const reward = expandTo18Decimals(10)
+  const rewardAmounts: BigNumber[] = new Array(stakingTokens.length).fill(expandTo18Decimals(10))
   const stakingRewardsFactory = await deployContract(wallet, StakingRewardsFactory, [
     rewardsToken.address,
+    rewardAmounts,
     stakingRewardsContracts.map((stakingRewardsContract) => stakingRewardsContract.address),
     genesis,
-    reward,
   ])
   expect(stakingRewardsFactory.address).to.be.eq(stakingRewardsFactoryAddress)
 
-  return { rewardsToken, stakingTokens, stakingRewardsContracts, genesis, reward, stakingRewardsFactory }
+  return { rewardsToken, stakingTokens, stakingRewardsContracts, genesis, rewardAmounts, stakingRewardsFactory }
 }

@@ -21,14 +21,14 @@ describe('StakingRewardsFactory', () => {
   let rewardsToken: Contract
   let stakingRewardsContracts: Contract[]
   let genesis: number
-  let reward: BigNumber
+  let rewardAmounts: BigNumber[]
   let stakingRewardsFactory: Contract
   beforeEach(async () => {
     const fixture = await loadFixture(stakingRewardsFactoryFixture)
     rewardsToken = fixture.rewardsToken
     stakingRewardsContracts = fixture.stakingRewardsContracts
     genesis = fixture.genesis
-    reward = fixture.reward
+    rewardAmounts = fixture.rewardAmounts
     stakingRewardsFactory = fixture.stakingRewardsFactory
   })
 
@@ -40,7 +40,11 @@ describe('StakingRewardsFactory', () => {
 
   it('notifyRewardAmounts', async () => {
     // send reward to the factory
-    await rewardsToken.transfer(stakingRewardsFactory.address, reward.mul(stakingRewardsContracts.length))
+    const totalRewardAmount = rewardAmounts.reduce(
+      (accumulator, current) => accumulator.add(current),
+      BigNumber.from(0)
+    )
+    await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
 
     await mineBlock(provider, genesis)
 
