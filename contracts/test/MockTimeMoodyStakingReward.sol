@@ -3,7 +3,7 @@ pragma solidity ^0.5.16;
 import "../MoodyStakingReward.sol";
 
 contract MockTimeMoodyStakingReward is MoodyStakingReward {
-    uint32 public time;
+    uint64 public time;
 
     constructor(
         IERC20 rewardToken_,
@@ -13,11 +13,11 @@ contract MockTimeMoodyStakingReward is MoodyStakingReward {
         uint96 rewardAmountPerSecond_
     ) MoodyStakingReward(rewardToken_, stakedToken_, startingSecond_, endingSecond_, rewardAmountPerSecond_) public {}
 
-    function currentTimestamp() view internal returns (uint32) {
+    function currentTimestamp() view internal returns (uint64) {
         return time;
     }
 
-    function setTime(uint32 time_) public {
+    function setTime(uint64 time_) public {
         require(time_ > time, 'no backwards time');
         time = time_;
     }

@@ -4,8 +4,8 @@ import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity-2.3.0/contracts/token/ERC20/IERC20.sol";
 
 contract KnowsTime {
-    function currentTimestamp() view internal returns (uint32) {
-        return uint32(block.timestamp); // == % 2**32
+    function currentTimestamp() view internal returns (uint64) {
+        return uint64(block.timestamp); // == % 2**64
     }
 }
 
@@ -27,14 +27,14 @@ contract MoodyStakingReward is KnowsTime {
     uint64 public endingSecond;
 
     // when the cumulative reward rate per share was last updated
-    uint32 public lastUpdateTimestamp;
+    uint64 public lastUpdateTimestamp;
 
     // note: the total amount of reward token required by this contract for distribution is (endingSecond - startingSecond) * rewardAmountPerSecond
 
     // the (reward amount per second per staked token) * (seconds) for the life of the contract
     // used to compute the average reward amount per second per staked token
-    // the rate per share is expressed as a fixed point 96x128
-    // the other 32 bits are used to encode the time
+    // the rate per share is expressed as a fixed point 96x96
+    // the other 64 bits are used to encode the time
     uint public cumulativeRewardRatePerShare;
 
     // the token that is staked in exchange for rewards
@@ -43,13 +43,13 @@ contract MoodyStakingReward is KnowsTime {
     // information about each account's staking
     struct Stake {
         // amount of staking token that is staked
-        uint128 amount;
+        uint96 amount;
 
         // the amount of the reward token owed to the staker
         uint96 rewards;
 
         // the last time this staker info was updated
-        uint32 lastUpdateTimestamp;
+        uint64 lastUpdateTimestamp;
 
         // used to compute rewards
         // formula is to first compute time weighted average reward rate per share
@@ -63,9 +63,8 @@ contract MoodyStakingReward is KnowsTime {
     uint public totalStakedAmount;
 
     constructor(IERC20 rewardToken_, IERC20 stakedToken_, uint64 startingSecond_, uint64 endingSecond_, uint96 rewardAmountPerSecond_) public {
-        require(startingSecond_ < endingSecond_, 'Starting timestamp must come before ending timestamp');
-        require((endingSecond_ - startingSecond_) <= uint32(- 1), 'Period too long');
-        require(rewardAmountPerSecond_ > 0, 'Reward amount must be greater than 0');
+        require(startingSecond_ < endingSecond_, 'MoodyStakingReward: starting time must come before ending time');
+        require(rewardAmountPerSecond_ > 0, 'MoodyStakingReward: reward amount per second must be greater than 0');
 
         rewardToken = rewardToken_;
         stakedToken = stakedToken_;
@@ -74,27 +73,19 @@ contract MoodyStakingReward is KnowsTime {
         endingSecond = endingSecond_;
     }
 
-    function boundedTime(uint64 start, uint64 end, uint32 time) pure private returns (uint32) {
-        uint32 truncatedStart = uint32(start);
-        uint32 truncatedEnd = uint32(end);
-        if (truncatedStart < truncatedEnd) {
-            if (time < truncatedStart) return truncatedStart;
-            if (time > truncatedEnd) return truncatedEnd;
-            return time;
-        } else if (truncatedStart > truncatedEnd) {
-            // todo: fix this
-            if (time > truncatedStart) return time;
-            if (time < truncatedEnd) return time;
-            return truncatedStart; // assume if it's in between, the period has not started yet
-        }
-        revert('Unexpected condition');
+    // returns the time, bounded by start/end.
+    // this timestamp is used to compute the amount of time that has elapsed and is eligible for rewards.
+    function boundedTime(uint64 start, uint64 end, uint64 time) pure private returns (uint64) {
+        if (time < start) return start;
+        if (time > end) return end;
+        return time;
     }
 
     // called before any state mutating operations that would affect the rewards rate.
     // updates the cumulative rewards rate up to the current timestamp, *before* the new action that changes it.
     // only needs to happen once per block.
     function _updateCumulativeRewardRatePerShare() internal {
-        uint32 time = currentTimestamp();
+        uint64 time = currentTimestamp();
         if (lastUpdateTimestamp == time) {
             // already updated in this block
             return;
@@ -107,13 +98,17 @@ contract MoodyStakingReward is KnowsTime {
             return;
         }
 
-        uint32 boundedLastUpdateTimestamp = boundedTime(startingSecond, endingSecond, lastUpdateTimestamp);
-        uint32 boundedCurrentTime = boundedTime(startingSecond, endingSecond, time);
-        uint32 rewardedTimeElapsed = boundedCurrentTime - boundedLastUpdateTimestamp;
+        uint64 start_ = startingSecond;
+        uint64 end_ = endingSecond;
+        uint64 lastUpdateTimestamp_ = lastUpdateTimestamp;
+        uint64 boundedCurrentTime = boundedTime(start_, end_, time);
+        uint64 rewardedTimeElapsed = boundedCurrentTime - boundedTime(start_,end_, lastUpdateTimestamp_);
 
-        cumulativeRewardRatePerShare = cumulativeRewardRatePerShare.add(
-            uint(2 ** 128).mul(rewardedTimeElapsed).mul(rewardAmountPerSecond).div(totalStakedAmount)
-        );
+        if (rewardedTimeElapsed > 0) {
+            cumulativeRewardRatePerShare = cumulativeRewardRatePerShare.add(
+                uint(2 ** 96).mul(rewardedTimeElapsed).mul(rewardAmountPerSecond).div(totalStakedAmount)
+            );
+        }
 
         lastUpdateTimestamp = time;
     }
@@ -126,17 +121,17 @@ contract MoodyStakingReward is KnowsTime {
         if (stake.lastUpdateTimestamp == lastUpdateTimestamp) return;
 
 
-        uint32 timeElapsed = lastUpdateTimestamp - stake.lastUpdateTimestamp;
+        uint64 timeElapsed = lastUpdateTimestamp - stake.lastUpdateTimestamp;
         // overflow desired in these subtractions
         uint averageRewardRatePerShare = (cumulativeRewardRatePerShare - stake.lastCumulativeRewardRatePerShare).div(timeElapsed);
-        uint rewards = averageRewardRatePerShare.mul(timeElapsed).mul(stake.amount).div(2 ** 128).add(stake.rewards);
-        require(rewards <= uint96(-1), 'Rewards overflow: you too paid');
+        uint rewards = averageRewardRatePerShare.mul(timeElapsed).mul(stake.amount).div(2 ** 96).add(stake.rewards);
+        require(rewards <= uint96(-1), 'MoodyStakingReward: rewards overflow uint96');
         stake.rewards = uint96(rewards);
         stake.lastCumulativeRewardRatePerShare = cumulativeRewardRatePerShare;
         stake.lastUpdateTimestamp = lastUpdateTimestamp;
     }
 
-    event Deposited(address staker, uint amount);
+    event Deposit(address staker, uint amount);
 
     // deposit lp shares into the staking contract and begin earning rewards
     function deposit(uint amount) public {
@@ -148,16 +143,16 @@ contract MoodyStakingReward is KnowsTime {
         _computeRewards(stake);
 
         uint unsafeAmount = amount.add(uint(stake.amount));
-        require(unsafeAmount <= uint128(-1), 'Staking amount overflow: you too rich');
-        stake.amount = uint128(unsafeAmount);
+        require(unsafeAmount <= uint96(-1), 'MoodyStakingReward: staking too much');
+        stake.amount = uint96(unsafeAmount);
         totalStakedAmount = totalStakedAmount.add(amount);
         stake.lastCumulativeRewardRatePerShare = cumulativeRewardRatePerShare;
         stake.lastUpdateTimestamp = currentTimestamp();
 
-        emit Deposited(msg.sender, amount);
+        emit Deposit(msg.sender, amount);
     }
 
-    event Withdrawn(address staker, uint amount);
+    event Withdraw(address staker, uint amount);
 
     // withdraw lp shares from the staking contract and stop earning rewards
     // does not collect rewards, must be a separate transaction
@@ -170,10 +165,10 @@ contract MoodyStakingReward is KnowsTime {
         stake.amount = uint96(uint(stake.amount).sub(amount));
         totalStakedAmount = totalStakedAmount.sub(amount);
 
-        emit Withdrawn(msg.sender, amount);
+        emit Withdraw(msg.sender, amount);
     }
 
-    event RewardCollected(address staker, uint amount);
+    event Collect(address staker, uint amount);
 
     // collect rewards owed to the sender address
     function collect() public {
@@ -187,6 +182,6 @@ contract MoodyStakingReward is KnowsTime {
             stake.rewards = 0;
             require(rewardToken.transfer(msg.sender, owed), 'MoodyStakingReward: rewards transfer failed');
         }
-        emit RewardCollected(msg.sender, owed);
+        emit Collect(msg.sender, owed);
     }
 }
