@@ -1,10 +1,10 @@
 import chai, { expect } from 'chai'
 import { Contract, BigNumber } from 'ethers'
-import { solidity, MockProvider, createFixtureLoader, deployContract } from 'ethereum-waffle'
+import { solidity, MockProvider, deployContract } from 'ethereum-waffle'
 
-import { stakingRewardsFixture } from './fixtures'
 import { REWARDS_DURATION, expandTo18Decimals, mineBlock } from './utils'
 
+import TestERC20 from '../build/TestERC20.json'
 import StakingRewards from '../build/StakingRewards.json'
 
 chai.use(solidity)
@@ -18,16 +18,22 @@ describe('StakingRewards', () => {
     },
   })
   const [wallet, staker, secondStaker] = provider.getWallets()
-  const loadFixture = createFixtureLoader([wallet], provider)
 
   let stakingRewards: Contract
   let rewardsToken: Contract
   let stakingToken: Contract
   beforeEach(async () => {
-    const fixture = await loadFixture(stakingRewardsFixture)
-    stakingRewards = fixture.stakingRewards
-    rewardsToken = fixture.rewardsToken
-    stakingToken = fixture.stakingToken
+    const owner = wallet.address
+    const rewardsDistribution = wallet.address
+    rewardsToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
+    stakingToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
+
+    stakingRewards = await deployContract(wallet, StakingRewards, [
+      owner,
+      rewardsDistribution,
+      rewardsToken.address,
+      stakingToken.address,
+    ])
   })
 
   it('deploy cost', async () => {
@@ -38,7 +44,7 @@ describe('StakingRewards', () => {
       stakingToken.address,
     ])
     const receipt = await provider.getTransactionReceipt(stakingRewards.deployTransaction.hash)
-    expect(receipt.gasUsed).to.eq('1910559')
+    expect(receipt.gasUsed).to.eq(1910571)
   })
 
   it('rewardsDuration', async () => {
