@@ -18,7 +18,7 @@ describe('MoodyStakingRewards', () => {
     },
   })
   const wallets = provider.getWallets()
-  const [wallet0, wallet1] = wallets
+  const [wallet0, wallet1, wallet2, wallet3] = wallets
 
   let stakingRewards: Contract
   let rewardsToken: Contract
@@ -49,8 +49,15 @@ describe('MoodyStakingRewards', () => {
 
   beforeEach('approve spending of staking rewards', async () => {
     await stakingToken.approve(stakingRewards.address, constants.MaxUint256)
-    await stakingToken.transfer(wallet1.address, 10000)
     await stakingToken.connect(wallet1).approve(stakingRewards.address, constants.MaxUint256)
+    await stakingToken.connect(wallet2).approve(stakingRewards.address, constants.MaxUint256)
+    await stakingToken.connect(wallet3).approve(stakingRewards.address, constants.MaxUint256)
+  })
+
+  beforeEach('fund other wallets', async () => {
+    await stakingToken.transfer(wallet1.address, 10000)
+    await stakingToken.transfer(wallet2.address, 10000)
+    await stakingToken.transfer(wallet3.address, 10000)
   })
 
   it('deployment gas', async () => {
@@ -58,65 +65,104 @@ describe('MoodyStakingRewards', () => {
     expect(receipt.gasUsed).to.eq(1079139)
   })
 
-  it('single staker scenario', async () => {
-    await expect(stakingRewards.deposit(100)).to.emit(stakingRewards, 'Deposited').withArgs(wallet0.address, 100)
-    expect(await stakingRewards.totalStakedAmount()).to.eq(100)
-    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
-    expect(await stakingRewards.lastUpdateTimestamp()).to.eq(1800)
-    await stakingRewards.setTime(3600)
-    await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 0)
-    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
-    expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3600)
+  describe('scenarios', () => {
+    it('single staker scenario', async () => {
+      await expect(stakingRewards.deposit(100)).to.emit(stakingRewards, 'Deposited').withArgs(wallet0.address, 100)
+      expect(await stakingRewards.totalStakedAmount()).to.eq(100)
+      expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
+      expect(await stakingRewards.lastUpdateTimestamp()).to.eq(1800)
+      await stakingRewards.setTime(3600)
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 0)
+      expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
+      expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3600)
 
-    await stakingRewards.setTime(3605) // 5 seconds = 500
+      await stakingRewards.setTime(3605) // 5 seconds = 500
 
-    const [amount, rewards, lastUpdateTimestamp, lastCumulativeRewardRatePerShare] = await stakingRewards.stakes(
-      wallet0.address
-    )
-    expect(amount).to.eq(100)
-    expect(rewards).to.eq(0)
-    expect(lastCumulativeRewardRatePerShare).to.eq(0)
-    expect(lastUpdateTimestamp).to.eq(3600)
+      const [amount, rewards, lastUpdateTimestamp, lastCumulativeRewardRatePerShare] = await stakingRewards.stakes(
+        wallet0.address
+      )
+      expect(amount).to.eq(100)
+      expect(rewards).to.eq(0)
+      expect(lastCumulativeRewardRatePerShare).to.eq(0)
+      expect(lastUpdateTimestamp).to.eq(3600)
 
-    await stakingRewards.deposit(1)
-    // this is == uint(2 ** 128).mul(rewardedTimeElapsed == 5).mul(rewardAmountPerSecond == 100).div(totalStakedAmount == 100)
-    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq('1701411834604692317316873037158841057280')
-    expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3605)
-    await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 500)
-  })
+      await stakingRewards.deposit(1)
+      // this is == uint(2 ** 128).mul(rewardedTimeElapsed == 5).mul(rewardAmountPerSecond == 100).div(totalStakedAmount == 100)
+      expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq('1701411834604692317316873037158841057280')
+      expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3605)
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 500)
+    })
 
-  it('multiple staker scenario', async () => {
-    await expect(stakingRewards.deposit(100)).to.emit(stakingRewards, 'Deposited').withArgs(wallet0.address, 100)
-    await expect(stakingRewards.connect(wallet1).deposit(200))
-      .to.emit(stakingRewards, 'Deposited')
-      .withArgs(wallet1.address, 200)
-    expect(await stakingRewards.totalStakedAmount()).to.eq(300)
-    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
-    expect(await stakingRewards.lastUpdateTimestamp()).to.eq(1800)
-    await stakingRewards.setTime(3600)
+    it('multiple staker scenario', async () => {
+      await expect(stakingRewards.deposit(100)).to.emit(stakingRewards, 'Deposited').withArgs(wallet0.address, 100)
+      await expect(stakingRewards.connect(wallet1).deposit(200))
+        .to.emit(stakingRewards, 'Deposited')
+        .withArgs(wallet1.address, 200)
+      expect(await stakingRewards.totalStakedAmount()).to.eq(300)
+      expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
+      expect(await stakingRewards.lastUpdateTimestamp()).to.eq(1800)
+      await stakingRewards.setTime(3600)
 
-    await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 0)
-    await expect(stakingRewards.connect(wallet1).collect())
-      .to.emit(stakingRewards, 'RewardCollected')
-      .withArgs(wallet1.address, 0)
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 0)
+      await expect(stakingRewards.connect(wallet1).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet1.address, 0)
 
-    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
-    expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3600)
+      expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq(0)
+      expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3600)
 
-    await stakingRewards.setTime(3605) // 5 seconds = 500
+      await stakingRewards.setTime(3605) // 5 seconds = 500
 
-    await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 166)
-    await expect(stakingRewards.connect(wallet1).collect())
-      .to.emit(stakingRewards, 'RewardCollected')
-      .withArgs(wallet1.address, 333)
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 166)
+      await expect(stakingRewards.connect(wallet1).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet1.address, 333)
 
-    // withdraw 100
-    await stakingRewards.withdraw(100)
-    // 5 more seconds
-    await stakingRewards.setTime(3610) // 5 seconds = 500
-    await expect(stakingRewards.connect(wallet1).collect())
-      .to.emit(stakingRewards, 'RewardCollected')
-      .withArgs(wallet1.address, 500)
+      // withdraw 100
+      await stakingRewards.withdraw(100)
+      // 5 more seconds
+      await stakingRewards.setTime(3610) // 5 seconds = 500
+      await expect(stakingRewards.connect(wallet1).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet1.address, 500)
+    })
+
+    it.only('multiple staker entire period', async () => {
+      await stakingRewards.deposit(100)
+      await stakingRewards.connect(wallet1).deposit(200)
+      await stakingRewards.setTime(3700)
+
+      await expect(stakingRewards.connect(wallet2).deposit(200))
+      await stakingRewards.setTime(4500)
+
+      await stakingRewards.deposit(200)
+      await stakingRewards.setTime(4600)
+      await stakingRewards.connect(wallet2).deposit(300)
+      await stakingRewards.setTime(6000)
+      await stakingRewards.connect(wallet1).deposit(100)
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 76284)
+      await stakingRewards.setTime(7500)
+
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 32727)
+      await expect(stakingRewards.connect(wallet1).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet1.address, 123584)
+      await expect(stakingRewards.connect(wallet2).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet2.address, 127402)
+
+      await stakingRewards.setTime(7800)
+
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 0)
+      await expect(stakingRewards.connect(wallet1).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet1.address, 0)
+      await expect(stakingRewards.connect(wallet2).collect())
+        .to.emit(stakingRewards, 'RewardCollected')
+        .withArgs(wallet2.address, 0)
+
+      expect(76284 + 32727 + 123584 + 127402).to.eq(359997) // almost exactly 360000
+    })
   })
 
   describe('before staking period begins', () => {

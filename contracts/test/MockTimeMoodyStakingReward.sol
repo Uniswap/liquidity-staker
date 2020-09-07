@@ -18,6 +18,7 @@ contract MockTimeMoodyStakingReward is MoodyStakingReward {
     }
 
     function setTime(uint32 time_) public {
+        require(time_ > time, 'no backwards time');
         time = time_;
     }
 }
