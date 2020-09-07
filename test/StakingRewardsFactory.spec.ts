@@ -3,7 +3,7 @@ import { Contract, BigNumber } from 'ethers'
 import { solidity, MockProvider, createFixtureLoader } from 'ethereum-waffle'
 
 import { stakingRewardsFactoryFixture } from './fixtures'
-import { REWARDS_DURATION, expandTo18Decimals, mineBlock } from './utils'
+import { mineBlock } from './utils'
 
 chai.use(solidity)
 
@@ -15,18 +15,28 @@ describe('StakingRewardsFactory', () => {
       gasLimit: 9999999,
     },
   })
-  const [wallet, staker] = provider.getWallets()
+  const [wallet] = provider.getWallets()
   const loadFixture = createFixtureLoader([wallet], provider)
 
-  let stakingTokens: Contract[]
-  let rewards: BigNumber[]
+  let rewardsToken: Contract
+  let stakingRewardsContracts: Contract[]
+  let reward: BigNumber
   let stakingRewardsFactory: Contract
   beforeEach(async () => {
     const fixture = await loadFixture(stakingRewardsFactoryFixture)
-    stakingTokens = fixture.stakingTokens
-    rewards = fixture.rewards
+    rewardsToken = fixture.rewardsToken
+    stakingRewardsContracts = fixture.stakingRewardsContracts
+    reward = fixture.reward
     stakingRewardsFactory = fixture.stakingRewardsFactory
   })
 
-  it('test')
+  it('notifyRewardAmounts', async () => {
+    const { timestamp: now } = await provider.getBlock('latest')
+    await mineBlock(provider, now + 60 * 60)
+
+    // send reward to the factory
+    await rewardsToken.transfer(stakingRewardsFactory.address, reward.mul(stakingRewardsContracts.length))
+
+    await stakingRewardsFactory.notifyRewardAmounts()
+  })
 })

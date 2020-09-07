@@ -1,5 +1,5 @@
 import chai, { expect } from 'chai'
-import { Contract, Wallet, BigNumber } from 'ethers'
+import { Contract, Wallet, BigNumber, providers } from 'ethers'
 import { solidity, deployContract } from 'ethereum-waffle'
 
 import { expandTo18Decimals } from './utils'
@@ -33,31 +33,46 @@ export async function stakingRewardsFixture([wallet]: Wallet[]): Promise<Staking
 }
 
 interface StakingRewardsFactoryFixture {
+  rewardsToken: Contract
   stakingTokens: Contract[]
-  rewards: BigNumber[]
+  stakingRewardsContracts: Contract[]
+  reward: BigNumber
   stakingRewardsFactory: Contract
 }
 
-export async function stakingRewardsFactoryFixture([wallet]: Wallet[]): Promise<StakingRewardsFactoryFixture> {
+export async function stakingRewardsFactoryFixture(
+  [wallet]: Wallet[],
+  provider: providers.Web3Provider
+): Promise<StakingRewardsFactoryFixture> {
   const owner = wallet.address
   const rewardsToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
+
+  const stakingRewardsFactoryAddress = Contract.getContractAddress({ from: wallet.address, nonce: 9 })
+
   const stakingTokens = []
-  const rewards = []
-  for (let i = 0; i < 30; i++) {
+  const stakingRewardsContracts = []
+
+  for (let i = 0; i < 4; i++) {
     const stakingToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
+    const stakingRewardsContract = await deployContract(wallet, StakingRewards, [
+      owner,
+      stakingRewardsFactoryAddress,
+      rewardsToken.address,
+      stakingToken.address,
+    ])
     stakingTokens.push(stakingToken)
-    rewards.push(expandTo18Decimals(i + 1))
+    stakingRewardsContracts.push(stakingRewardsContract)
   }
 
+  const { timestamp: now } = await provider.getBlock('latest')
+  const reward = expandTo18Decimals(10)
   const stakingRewardsFactory = await deployContract(wallet, StakingRewardsFactory, [
-    owner,
     rewardsToken.address,
-    stakingTokens.map((stakingToken) => stakingToken.address),
-    rewards,
+    stakingRewardsContracts.map((stakingRewardsContract) => stakingRewardsContract.address),
+    now + 60 * 60,
+    reward,
   ])
+  expect(stakingRewardsFactory.address).to.be.eq(stakingRewardsFactoryAddress)
 
-  const receipt = await stakingRewardsFactory.deployTransaction.wait()
-  expect(receipt.gasUsed).to.eq(459604)
-
-  return { stakingTokens, rewards, stakingRewardsFactory }
+  return { rewardsToken, stakingTokens, stakingRewardsContracts, reward, stakingRewardsFactory }
 }
