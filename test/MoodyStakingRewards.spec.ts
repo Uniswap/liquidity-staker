@@ -9,7 +9,7 @@ import MoodyStakingReward from '../build/MockTimeMoodyStakingReward.json'
 
 chai.use(solidity)
 
-describe.only('MoodyStakingRewards', () => {
+describe('MoodyStakingRewards', () => {
   const provider = new MockProvider({
     ganacheOptions: {
       hardfork: 'istanbul',
