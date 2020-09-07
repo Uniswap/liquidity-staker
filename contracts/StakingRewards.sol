@@ -64,9 +64,9 @@ contract StakingRewards is IStakingRewards, RewardsDistributionRecipient, Reentr
             return rewardPerTokenStored;
         }
         return
-        rewardPerTokenStored.add(
-            lastTimeRewardApplicable().sub(lastUpdateTime).mul(rewardRate).mul(1e18).div(_totalSupply)
-        );
+            rewardPerTokenStored.add(
+                lastTimeRewardApplicable().sub(lastUpdateTime).mul(rewardRate).mul(1e18).div(_totalSupply)
+            );
     }
 
     function earned(address account) public view returns (uint256) {
