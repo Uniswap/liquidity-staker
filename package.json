@@ -1,14 +1,24 @@
 {
-  "name": "incentivizer",
+  "name": "@uniswap/liquidity-staker",
   "version": "1.0.0",
   "author": "Noah Zinsmeister",
-  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Uniswap/liquidity-staker"
+  },
+  "files": [
+    "build"
+  ],
+  "engines": {
+    "node": ">=10"
+  },
   "scripts": {
     "precompile": "rimraf ./build/",
     "compile": "waffle",
     "pretest": "yarn compile",
     "test": "mocha",
-    "lint": "prettier ./test/**/*.ts --check"
+    "lint": "prettier ./test/**/*.ts --check",
+    "prepublishOnly": "yarn test"
   },
   "dependencies": {
     "openzeppelin-solidity-2.3.0": "npm:openzeppelin-solidity@2.3.0"
