@@ -65,19 +65,17 @@ describe.only('MoodyStakingRewards', () => {
 
     await stakingRewards.setTime(3605) // 5 seconds = 500
 
-    const [
-      amount,
-      rewards,
-      lastObservedCumulativeRewardRatePerShare,
-      lastUpdateTimestamp,
-    ] = await stakingRewards.stakes(wallet0.address)
+    const [amount, rewards, lastUpdateTimestamp, lastCumulativeRewardRatePerShare] = await stakingRewards.stakes(
+      wallet0.address
+    )
     expect(amount).to.eq(100)
     expect(rewards).to.eq(0)
-    expect(lastObservedCumulativeRewardRatePerShare).to.eq(0)
+    expect(lastCumulativeRewardRatePerShare).to.eq(0)
     expect(lastUpdateTimestamp).to.eq(3600)
 
     await stakingRewards.deposit(1)
-    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq('25961484292674138142652481646100480')
+    // this is == uint(2 ** 128).mul(rewardedTimeElapsed == 5).mul(rewardAmountPerSecond == 100).div(totalStakedAmount == 100)
+    expect(await stakingRewards.cumulativeRewardRatePerShare()).to.eq('1701411834604692317316873037158841057280')
     expect(await stakingRewards.lastUpdateTimestamp()).to.eq(3605)
     await expect(stakingRewards.collect()).to.emit(stakingRewards, 'RewardCollected').withArgs(wallet0.address, 500)
   })
@@ -106,36 +104,38 @@ describe.only('MoodyStakingRewards', () => {
     await expect(stakingRewards.connect(wallet1).collect())
       .to.emit(stakingRewards, 'RewardCollected')
       .withArgs(wallet1.address, 333)
+
+    // withdraw 100
+    await stakingRewards.withdraw(100)
+    // 5 more seconds
+    await stakingRewards.setTime(3610) // 5 seconds = 500
+    await expect(stakingRewards.connect(wallet1).collect())
+      .to.emit(stakingRewards, 'RewardCollected')
+      .withArgs(wallet1.address, 500)
   })
 
   describe('before staking period begins', () => {
     describe('#deposit', () => {
       it('sets the staked amount', async () => {
         await stakingRewards.deposit(100)
-        const [
-          amount,
-          rewards,
-          lastObservedCumulativeRewardRatePerShare,
-          lastUpdateTimestamp,
-        ] = await stakingRewards.stakes(wallet0.address)
+        const [amount, rewards, lastUpdateTimestamp, lastCumulativeRewardRatePerShare] = await stakingRewards.stakes(
+          wallet0.address
+        )
         expect(amount).to.eq(100)
         expect(rewards).to.eq(0)
-        expect(lastObservedCumulativeRewardRatePerShare).to.eq(0)
+        expect(lastCumulativeRewardRatePerShare).to.eq(0)
         expect(lastUpdateTimestamp).to.eq(1800)
       })
 
       it('adds to the staked amount', async () => {
         await stakingRewards.deposit(100)
         await stakingRewards.deposit(200)
-        const [
-          amount,
-          rewards,
-          lastObservedCumulativeRewardRatePerShare,
-          lastUpdateTimestamp,
-        ] = await stakingRewards.stakes(wallet0.address)
+        const [amount, rewards, lastUpdateTimestamp, lastCumulativeRewardRatePerShare] = await stakingRewards.stakes(
+          wallet0.address
+        )
         expect(amount).to.eq(300)
         expect(rewards).to.eq(0)
-        expect(lastObservedCumulativeRewardRatePerShare).to.eq(0)
+        expect(lastCumulativeRewardRatePerShare).to.eq(0)
         expect(lastUpdateTimestamp).to.eq(1800)
       })
 
