@@ -145,10 +145,10 @@ describe.only('MoodyStakingRewards', () => {
         expect(await stakingRewards.lastUpdateTimestamp()).to.eq(1800)
       })
 
-      it.skip('gas', async () => {
+      it('gas', async () => {
         const tx = await stakingRewards.deposit(100)
         const receipt = await tx.wait()
-        expect(receipt.gasUsed).to.eq('128183')
+        expect(receipt.gasUsed).to.eq('119525')
       })
     })
   })
