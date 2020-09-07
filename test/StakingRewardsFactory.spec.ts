@@ -7,7 +7,7 @@ import { mineBlock } from './utils'
 
 chai.use(solidity)
 
-describe('StakingRewardsFactory', () => {
+describe.only('StakingRewardsFactory', () => {
   const provider = new MockProvider({
     ganacheOptions: {
       hardfork: 'istanbul',
@@ -23,7 +23,8 @@ describe('StakingRewardsFactory', () => {
   let genesis: number
   let rewardAmounts: BigNumber[]
   let stakingRewardsFactory: Contract
-  beforeEach(async () => {
+
+  beforeEach('load fixture', async () => {
     const fixture = await loadFixture(stakingRewardsFactoryFixture)
     rewardsToken = fixture.rewardsToken
     stakingRewardsContracts = fixture.stakingRewardsContracts
@@ -32,26 +33,44 @@ describe('StakingRewardsFactory', () => {
     stakingRewardsFactory = fixture.stakingRewardsFactory
   })
 
-  it('notifyRewardAmounts:fail', async () => {
-    await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
-      'StakingRewardsFactory::notifyRewardAmounts: not ready'
-    )
+  it('deployment gas', async () => {
+    const receipt = await provider.getTransactionReceipt(stakingRewardsFactory.deployTransaction.hash)
+    expect(receipt.gasUsed).to.eq('578600')
   })
 
-  it('notifyRewardAmounts', async () => {
-    // send reward to the factory
-    const totalRewardAmount = rewardAmounts.reduce(
-      (accumulator, current) => accumulator.add(current),
-      BigNumber.from(0)
-    )
-    await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+  describe('#notifyRewardsAmounts', () => {
+    let totalRewardAmount: BigNumber
 
-    await mineBlock(provider, genesis)
+    beforeEach(() => {
+      totalRewardAmount = rewardAmounts.reduce((accumulator, current) => accumulator.add(current), BigNumber.from(0))
+    })
 
-    await stakingRewardsFactory.notifyRewardAmounts()
+    it('fails if called before genesis', async () => {
+      await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
+        'StakingRewardsFactory::notifyRewardAmounts: not ready'
+      )
+    })
 
-    await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
-      'StakingRewardsFactory::notifyRewardAmounts: already notified'
-    )
+    it('fails if called twice', async () => {
+      await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+      await mineBlock(provider, genesis)
+      await stakingRewardsFactory.notifyRewardAmounts()
+      await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
+        'StakingRewardsFactory::notifyRewardAmounts: already notified'
+      )
+    })
+
+    it('fails if called without sufficient balance', async () => {
+      await mineBlock(provider, genesis)
+      await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
+        'SafeMath: subtraction overflow' // emitted from rewards token
+      )
+    })
+
+    it('succeeds when has sufficient balance and after genesis time', async () => {
+      await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+      await mineBlock(provider, genesis)
+      await stakingRewardsFactory.notifyRewardAmounts()
+    })
   })
 })
