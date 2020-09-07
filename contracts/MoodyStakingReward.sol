@@ -86,6 +86,7 @@ contract MoodyStakingReward is KnowsTime {
     // only needs to happen once per block.
     function _updateCumulativeRewardRatePerShare() internal {
         uint64 time = currentTimestamp();
+
         if (lastUpdateTimestamp == time) {
             // already updated in this block
             return;
@@ -98,11 +99,8 @@ contract MoodyStakingReward is KnowsTime {
             return;
         }
 
-        uint64 start_ = startingSecond;
-        uint64 end_ = endingSecond;
-        uint64 lastUpdateTimestamp_ = lastUpdateTimestamp;
-        uint64 boundedCurrentTime = boundedTime(start_, end_, time);
-        uint64 rewardedTimeElapsed = boundedCurrentTime - boundedTime(start_,end_, lastUpdateTimestamp_);
+        uint64 boundedCurrentTime = boundedTime(startingSecond, endingSecond, time);
+        uint64 rewardedTimeElapsed = boundedCurrentTime - boundedTime(startingSecond, endingSecond, lastUpdateTimestamp);
 
         if (rewardedTimeElapsed > 0) {
             cumulativeRewardRatePerShare = cumulativeRewardRatePerShare.add(
@@ -120,11 +118,9 @@ contract MoodyStakingReward is KnowsTime {
         // no time has passed since last computation
         if (stake.lastUpdateTimestamp == lastUpdateTimestamp) return;
 
-
-        uint64 timeElapsed = lastUpdateTimestamp - stake.lastUpdateTimestamp;
         // overflow desired in these subtractions
-        uint averageRewardRatePerShare = (cumulativeRewardRatePerShare - stake.lastCumulativeRewardRatePerShare).div(timeElapsed);
-        uint rewards = averageRewardRatePerShare.mul(timeElapsed).mul(stake.amount).div(2 ** 96).add(stake.rewards);
+        uint rewardRatPerShareOverPeriod = (cumulativeRewardRatePerShare - stake.lastCumulativeRewardRatePerShare);
+        uint rewards = rewardRatPerShareOverPeriod.mul(stake.amount).div(2 ** 96).add(stake.rewards);
         require(rewards <= uint96(-1), 'MoodyStakingReward: rewards overflow uint96');
         stake.rewards = uint96(rewards);
         stake.lastCumulativeRewardRatePerShare = cumulativeRewardRatePerShare;
@@ -183,5 +179,11 @@ contract MoodyStakingReward is KnowsTime {
             require(rewardToken.transfer(msg.sender, owed), 'MoodyStakingReward: rewards transfer failed');
         }
         emit Collect(msg.sender, owed);
+    }
+
+    // completely exits the position, by withdrawing the amount owed and then collecting.
+    function exit() public {
+        withdraw(stakes[msg.sender].amount);
+        collect();
     }
 }

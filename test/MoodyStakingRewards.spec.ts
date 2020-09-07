@@ -62,7 +62,7 @@ describe('MoodyStakingRewards', () => {
 
   it('deployment gas', async () => {
     const receipt = await provider.getTransactionReceipt(stakingRewards.deployTransaction.hash)
-    expect(receipt.gasUsed).to.eq(1050575)
+    expect(receipt.gasUsed).to.eq(1047328)
   })
 
   describe('scenarios', () => {
@@ -127,7 +127,7 @@ describe('MoodyStakingRewards', () => {
         .withArgs(wallet1.address, 500)
     })
 
-    it.only('multiple staker entire period', async () => {
+    it('multiple staker entire period', async () => {
       await stakingRewards.deposit(100)
       await stakingRewards.connect(wallet1).deposit(200)
       await stakingRewards.setTime(3700)
@@ -142,20 +142,20 @@ describe('MoodyStakingRewards', () => {
       await stakingRewards.connect(wallet2).withdraw(100)
       await stakingRewards.connect(wallet1).deposit(100)
       let total: number = 0
-      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'Collect').withArgs(wallet0.address, 76284)
-      total += 76284
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'Collect').withArgs(wallet0.address, 76285)
+      total += 76285
       await stakingRewards.setTime(7500)
 
-      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'Collect').withArgs(wallet0.address, 35999)
-      total += 35999
+      await expect(stakingRewards.collect()).to.emit(stakingRewards, 'Collect').withArgs(wallet0.address, 36000)
+      total += 36000
       await expect(stakingRewards.connect(wallet1).collect())
         .to.emit(stakingRewards, 'Collect')
-        .withArgs(wallet1.address, 126856)
-      total += 126856
+        .withArgs(wallet1.address, 126857)
+      total += 126857
       await expect(stakingRewards.connect(wallet2).collect())
         .to.emit(stakingRewards, 'Collect')
-        .withArgs(wallet2.address, 120855)
-      total += 120855
+        .withArgs(wallet2.address, 120857)
+      total += 120857
 
       await stakingRewards.setTime(7800)
 
@@ -167,7 +167,7 @@ describe('MoodyStakingRewards', () => {
         .to.emit(stakingRewards, 'Collect')
         .withArgs(wallet2.address, 0)
 
-      expect(total).to.eq(359994) // almost exactly 360000
+      expect(total).to.eq(359999) // almost exactly 360000
     })
   })
 
