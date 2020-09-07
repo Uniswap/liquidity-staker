@@ -13,6 +13,10 @@ contract MockTimeMoodyStakingReward is MoodyStakingReward {
         uint rewardAmountPerSecond_
     ) MoodyStakingReward(rewardToken_, stakedToken_, startingSecond_, endingSecond_, rewardAmountPerSecond_) public {}
 
+    function currentTimestamp() view internal returns (uint) {
+        return time;
+    }
+
     function setTime(uint time_) public {
         time = time_;
     }

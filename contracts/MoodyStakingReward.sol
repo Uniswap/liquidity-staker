@@ -26,10 +26,11 @@ contract MoodyStakingReward is KnowsTime {
     // note: the total amount required by this contract for distribution is (endingSecond - startingSecond) * rewardAmountPerSecond
 
     // the (reward amount per second per staked token) * (seconds) for the life of the contract
-    // used to compute the average (reward amount per second per staked token)
-    uint public lastCumulativeRewardRatePerShare;
+    // used to compute the average reward amount per second per staked token
+    // the rate per share is expressed as a fixed point 112x112
+    uint public cumulativeRewardRatePerShare;
     // when the last cumulative reward rate was last updated
-    uint public lastCumulativeRewardRatePerShareTimestamp;
+    uint public lastUpdateTimestamp;
 
     // the token that is staked in exchange for rewards
     IERC20 public stakedToken;
@@ -42,9 +43,10 @@ contract MoodyStakingReward is KnowsTime {
         uint rewards;
         // used to compute rewards
         // formula is to first compute time weighted average reward rate per share
-        // this is currentCumulativeRewardRatePerShare - stake.lastObservedCumulativeRewardRatePerShare / (lastCumulativeRewardRatePerShare - lastObservedCumulativeRewardRatePerShareTimestamp)
-        uint lastObservedCumulativeRewardRatePerShare;
-        uint lastObservedCumulativeRewardRatePerShareTimestamp;
+        // this is (currentCumulativeRewardRatePerShare - stake.lastCumulativeRewardRatePerShare) / (cumulativeRewardRatePerShare - lastUpdateTimestamp)
+        // then multiply by staked amount to get the rewards for that period
+        uint lastCumulativeRewardRatePerShare;
+        uint lastUpdateTimestamp;
     }
 
     // how much is staked for each account
@@ -63,31 +65,60 @@ contract MoodyStakingReward is KnowsTime {
         endingSecond = endingSecond_;
     }
 
-    function _updateLastCumulativeRewardRatePerShare() internal {
-        // no update necessary, reward rate per second is 0 and we have updated after the last second
-        if (lastCumulativeRewardRatePerShareTimestamp > endingSecond) return;
+    function boundedTime(uint start, uint end, uint time) pure private returns (uint) {
+        return Math.min(Math.max(time, start), end);
+    }
 
-        uint boundedTimeElapsed = Math.min(currentTimestamp(), endingSecond) - Math.max(lastCumulativeRewardRatePerShareTimestamp, startingSecond);
+    // called before any state mutating operations that would affect the rewards rate.
+    // updates the cumulative rewards rate up to the current timestamp, *before* the new action that changes it.
+    // only needs to happen once per block.
+    function _updateCumulativeRewardRatePerShare() internal {
+        uint time = currentTimestamp();
+        if (lastUpdateTimestamp == time) {
+            // already updated in this block
+            return;
+        }
 
-        lastCumulativeRewardRatePerShare = lastCumulativeRewardRatePerShare.add(
-            boundedTimeElapsed.mul(rewardAmountPerSecond).div(totalStakedAmount)
+        // set reward rate to 0 if nothing is staked at the beginning of this block
+        if (totalStakedAmount == 0) {
+            cumulativeRewardRatePerShare = 0;
+            lastUpdateTimestamp = time;
+            return;
+        }
+
+        uint boundedLastUpdateTimestamp = boundedTime(startingSecond, endingSecond, lastUpdateTimestamp);
+        uint boundedCurrentTime = boundedTime(startingSecond, endingSecond, time);
+        uint rewardedTimeElapsed = boundedCurrentTime.sub(boundedLastUpdateTimestamp);
+
+        cumulativeRewardRatePerShare = cumulativeRewardRatePerShare.add(
+            rewardedTimeElapsed.mul(rewardAmountPerSecond).mul(2 ** 112).div(totalStakedAmount)
         );
-        lastCumulativeRewardRatePerShareTimestamp = currentTimestamp();
+
+        lastUpdateTimestamp = time;
     }
 
     // computes the rewards for the stake given the current total stake amount
     function _computeRewards(Stake storage stake) internal {
+        // nothing staked
         if (stake.amount == 0) return;
-        uint reward = (lastCumulativeRewardRatePerShare - stake.lastObservedCumulativeRewardRatePerShare).mul(stake.amount) /
-        (lastCumulativeRewardRatePerShareTimestamp - stake.lastObservedCumulativeRewardRatePerShareTimestamp);
+        // no time has passed since last computation
+        if (stake.lastUpdateTimestamp == lastUpdateTimestamp) return;
+
+
+        uint timeElapsed = lastUpdateTimestamp - stake.lastUpdateTimestamp;
+        // overflow desired in these subtractions
+        uint averageRewardRatePerShare = (cumulativeRewardRatePerShare - stake.lastCumulativeRewardRatePerShare).div(timeElapsed);
+        uint reward = stake.amount.mul(averageRewardRatePerShare.mul(timeElapsed)).div(2 ** 112);
         stake.rewards = stake.rewards.add(reward);
-        stake.lastObservedCumulativeRewardRatePerShare = lastCumulativeRewardRatePerShare;
-        stake.lastObservedCumulativeRewardRatePerShareTimestamp = lastCumulativeRewardRatePerShareTimestamp;
+        stake.lastCumulativeRewardRatePerShare = cumulativeRewardRatePerShare;
+        stake.lastUpdateTimestamp = lastUpdateTimestamp;
     }
+
+    event Deposited(address staker, uint amount);
 
     // deposit lp shares into the staking contract and begin earning rewards
     function deposit(uint amount) public {
-        _updateLastCumulativeRewardRatePerShare();
+        _updateCumulativeRewardRatePerShare();
 
         require(stakedToken.transferFrom(msg.sender, address(this), amount), 'MoodyStakingReward: staking transferFrom failed');
 
@@ -96,31 +127,42 @@ contract MoodyStakingReward is KnowsTime {
 
         stake.amount = stake.amount.add(amount);
         totalStakedAmount = totalStakedAmount.add(amount);
+        stake.lastCumulativeRewardRatePerShare = cumulativeRewardRatePerShare;
+        stake.lastUpdateTimestamp = currentTimestamp();
 
-        stake.lastObservedCumulativeRewardRatePerShare = lastCumulativeRewardRatePerShare;
+        emit Deposited(msg.sender, amount);
     }
+
+    event Withdrawn(address staker, uint amount);
 
     // withdraw lp shares from the staking contract and stop earning rewards
     // does not collect rewards, must be a separate transaction
     function withdraw(uint amount) public {
-        _updateLastCumulativeRewardRatePerShare();
+        _updateCumulativeRewardRatePerShare();
 
         Stake storage stake = stakes[msg.sender];
         _computeRewards(stake);
 
         stake.amount = stake.amount.sub(amount);
         totalStakedAmount = totalStakedAmount.sub(amount);
+
+        emit Withdrawn(msg.sender, amount);
     }
+
+    event RewardCollected(address staker, uint amount);
 
     // collect rewards owed to the sender address
     function collect() public {
-        _updateLastCumulativeRewardRatePerShare();
+        _updateCumulativeRewardRatePerShare();
+
         Stake storage stake = stakes[msg.sender];
         _computeRewards(stake);
+
         uint owed = stake.rewards;
         if (owed > 0) {
             stake.rewards = 0;
             require(rewardToken.transfer(msg.sender, owed), 'MoodyStakingReward: rewards transfer failed');
         }
+        emit RewardCollected(msg.sender, owed);
     }
 }
