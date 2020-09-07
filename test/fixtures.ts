@@ -10,6 +10,8 @@ import StakingRewardsFactory from '../build/StakingRewardsFactory.json'
 
 chai.use(solidity)
 
+const NUMBER_OF_STAKING_TOKENS = 4
+
 interface StakingRewardsFixture {
   stakingRewards: Contract
   rewardsToken: Contract
@@ -36,6 +38,7 @@ interface StakingRewardsFactoryFixture {
   rewardsToken: Contract
   stakingTokens: Contract[]
   stakingRewardsContracts: Contract[]
+  genesis: number
   reward: BigNumber
   stakingRewardsFactory: Contract
 }
@@ -47,32 +50,39 @@ export async function stakingRewardsFactoryFixture(
   const owner = wallet.address
   const rewardsToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
 
+  // deploy staking tokens
+  const stakingTokens = []
+  for (let i = 0; i < NUMBER_OF_STAKING_TOKENS; i++) {
+    const stakingToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
+    stakingTokens.push(stakingToken)
+  }
+
+  // get the counterfactual staking rewards factory address
   const stakingRewardsFactoryAddress = Contract.getContractAddress({ from: wallet.address, nonce: 9 })
 
-  const stakingTokens = []
+  // deploy individual staking rewards contracts
   const stakingRewardsContracts = []
-
   for (let i = 0; i < 4; i++) {
-    const stakingToken = await deployContract(wallet, TestERC20, [expandTo18Decimals(1000000)])
     const stakingRewardsContract = await deployContract(wallet, StakingRewards, [
       owner,
       stakingRewardsFactoryAddress,
       rewardsToken.address,
-      stakingToken.address,
+      stakingTokens[i].address,
     ])
-    stakingTokens.push(stakingToken)
     stakingRewardsContracts.push(stakingRewardsContract)
   }
 
+  // deploy the staking rewards factory
   const { timestamp: now } = await provider.getBlock('latest')
+  const genesis = now + 60 * 60
   const reward = expandTo18Decimals(10)
   const stakingRewardsFactory = await deployContract(wallet, StakingRewardsFactory, [
     rewardsToken.address,
     stakingRewardsContracts.map((stakingRewardsContract) => stakingRewardsContract.address),
-    now + 60 * 60,
+    genesis,
     reward,
   ])
   expect(stakingRewardsFactory.address).to.be.eq(stakingRewardsFactoryAddress)
 
-  return { rewardsToken, stakingTokens, stakingRewardsContracts, reward, stakingRewardsFactory }
+  return { rewardsToken, stakingTokens, stakingRewardsContracts, genesis, reward, stakingRewardsFactory }
 }
