@@ -53,6 +53,11 @@ describe.only('MoodyStakingRewards', () => {
     await stakingToken.connect(wallet1).approve(stakingRewards.address, constants.MaxUint256)
   })
 
+  it('deployment gas', async () => {
+    const receipt = await provider.getTransactionReceipt(stakingRewards.deployTransaction.hash)
+    expect(receipt.gasUsed).to.eq(1079139)
+  })
+
   it('single staker scenario', async () => {
     await expect(stakingRewards.deposit(100)).to.emit(stakingRewards, 'Deposited').withArgs(wallet0.address, 100)
     expect(await stakingRewards.totalStakedAmount()).to.eq(100)
