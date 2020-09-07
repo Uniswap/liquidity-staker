@@ -82,6 +82,7 @@ contract MoodyStakingReward is KnowsTime {
             if (time > truncatedEnd) return truncatedEnd;
             return time;
         } else if (truncatedStart > truncatedEnd) {
+            // todo: fix this
             if (time > truncatedStart) return time;
             if (time < truncatedEnd) return time;
             return truncatedStart; // assume if it's in between, the period has not started yet
