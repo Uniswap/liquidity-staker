@@ -7,7 +7,7 @@ import { mineBlock } from './utils'
 
 chai.use(solidity)
 
-describe.only('StakingRewardsFactory', () => {
+describe('StakingRewardsFactory', () => {
   const provider = new MockProvider({
     ganacheOptions: {
       hardfork: 'istanbul',
