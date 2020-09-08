@@ -65,12 +65,13 @@ contract StakingRewardsFactory is Ownable {
 
         StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
         require(info.stakingRewards != address(0), "StakingRewardsFactory::notifyRewardAmount: not deployed");
-        require(info.rewardAmount > 0, "StakingRewardsFactory::notifyRewardAmount: no reward to notify");
 
-        uint rewardAmount = info.rewardAmount;
-        info.rewardAmount = 0;
+        if (info.rewardAmount > 0) {
+            uint rewardAmount = info.rewardAmount;
+            info.rewardAmount = 0;
 
-        IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount);
-        StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
+            IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount);
+            StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
+        }
     }
 }
