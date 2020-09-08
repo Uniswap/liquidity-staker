@@ -5,6 +5,8 @@ import { solidity, MockProvider, createFixtureLoader } from 'ethereum-waffle'
 import { stakingRewardsFactoryFixture } from './fixtures'
 import { mineBlock } from './utils'
 
+import StakingRewards from '../build/StakingRewards.json'
+
 chai.use(solidity)
 
 describe('StakingRewardsFactory', () => {
@@ -19,23 +21,57 @@ describe('StakingRewardsFactory', () => {
   const loadFixture = createFixtureLoader([wallet], provider)
 
   let rewardsToken: Contract
-  let stakingRewardsContracts: Contract[]
   let genesis: number
   let rewardAmounts: BigNumber[]
   let stakingRewardsFactory: Contract
+  let stakingTokens: Contract[]
 
   beforeEach('load fixture', async () => {
     const fixture = await loadFixture(stakingRewardsFactoryFixture)
     rewardsToken = fixture.rewardsToken
-    stakingRewardsContracts = fixture.stakingRewardsContracts
     genesis = fixture.genesis
     rewardAmounts = fixture.rewardAmounts
     stakingRewardsFactory = fixture.stakingRewardsFactory
+    stakingTokens = fixture.stakingTokens
   })
 
   it('deployment gas', async () => {
     const receipt = await provider.getTransactionReceipt(stakingRewardsFactory.deployTransaction.hash)
-    expect(receipt.gasUsed).to.eq('578600')
+    expect(receipt.gasUsed).to.eq('1914571')
+  })
+
+  describe('#deploy', () => {
+    it('pushes the token into the list', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      expect(await stakingRewardsFactory.stakingTokens(0)).to.eq(stakingTokens[1].address)
+    })
+
+    it('fails if called twice for same token', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      await expect(stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)).to.revertedWith(
+        'StakingRewardsFactory::deploy: already deployed'
+      )
+    })
+
+    it('stores the address of stakingRewards and reward amount', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      const [stakingRewards, rewardAmount] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(
+        stakingTokens[1].address
+      )
+      expect(await provider.getCode(stakingRewards)).to.not.eq('0x')
+      expect(rewardAmount).to.eq(10000)
+    })
+
+    it('deployed staking rewards has correct parameters', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      const [stakingRewardsAddress] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(
+        stakingTokens[1].address
+      )
+      const stakingRewards = new Contract(stakingRewardsAddress, StakingRewards.abi, provider)
+      expect(await stakingRewards.rewardsDistribution()).to.eq(stakingRewardsFactory.address)
+      expect(await stakingRewards.stakingToken()).to.eq(stakingTokens[1].address)
+      expect(await stakingRewards.rewardsToken()).to.eq(rewardsToken.address)
+    })
   })
 
   describe('#notifyRewardsAmounts', () => {
@@ -45,32 +81,46 @@ describe('StakingRewardsFactory', () => {
       totalRewardAmount = rewardAmounts.reduce((accumulator, current) => accumulator.add(current), BigNumber.from(0))
     })
 
-    it('fails if called before genesis', async () => {
+    it('called before any deploys', async () => {
       await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
-        'StakingRewardsFactory::notifyRewardAmounts: not ready'
+        'StakingRewardsFactory::notifyRewardAmounts: called before any deploys'
       )
     })
 
-    it('fails if called twice', async () => {
-      await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
-      await mineBlock(provider, genesis)
-      await stakingRewardsFactory.notifyRewardAmounts()
-      await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
-        'StakingRewardsFactory::notifyRewardAmounts: already notified'
-      )
-    })
+    describe('after deploying all staking reward contracts', async () => {
+      beforeEach('deploy staking reward contracts', async () => {
+        for (let i = 0; i < stakingTokens.length; i++) {
+          await stakingRewardsFactory.deploy(stakingTokens[i].address, rewardAmounts[i])
+        }
+      })
 
-    it('fails if called without sufficient balance', async () => {
-      await mineBlock(provider, genesis)
-      await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
-        'SafeMath: subtraction overflow' // emitted from rewards token
-      )
-    })
+      it('gas', async () => {
+        await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+        await mineBlock(provider, genesis)
+        const tx = await stakingRewardsFactory.notifyRewardAmounts()
+        const receipt = await tx.wait()
+        expect(receipt.gasUsed).to.eq('416215')
+      })
 
-    it('succeeds when has sufficient balance and after genesis time', async () => {
-      await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
-      await mineBlock(provider, genesis)
-      await stakingRewardsFactory.notifyRewardAmounts()
+      it('no op if called twice', async () => {
+        await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+        await mineBlock(provider, genesis)
+        await expect(stakingRewardsFactory.notifyRewardAmounts()).to.emit(rewardsToken, 'Transfer')
+        await expect(stakingRewardsFactory.notifyRewardAmounts()).to.not.emit(rewardsToken, 'Transfer')
+      })
+
+      it('fails if called without sufficient balance', async () => {
+        await mineBlock(provider, genesis)
+        await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
+          'SafeMath: subtraction overflow' // emitted from rewards token
+        )
+      })
+
+      it('succeeds when has sufficient balance and after genesis time', async () => {
+        await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+        await mineBlock(provider, genesis)
+        await stakingRewardsFactory.notifyRewardAmounts()
+      })
     })
   })
 })
