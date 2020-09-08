@@ -41,6 +41,7 @@ contract StakingRewardsFactory is Ownable {
 
         info.stakingRewards = address(new StakingRewards(msg.sender, address(this), rewardsToken, stakingToken));
         info.rewardAmount = rewardAmount;
+        stakingTokens.push(stakingToken);
 
         // collect the reward amount from the sender to be distributed after genesis
         IERC20(rewardsToken).transferFrom(msg.sender, address(this), rewardAmount);
