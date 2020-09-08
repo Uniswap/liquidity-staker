@@ -1,9 +1,9 @@
 pragma solidity ^0.5.16;
 
-import "openzeppelin-solidity-2.3.0/contracts/token/ERC20/IERC20.sol";
-import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
+import 'openzeppelin-solidity-2.3.0/contracts/token/ERC20/IERC20.sol';
+import 'openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol';
 
-import "./StakingRewards.sol";
+import './StakingRewards.sol';
 
 contract StakingRewardsFactory is Ownable {
     // immutables
@@ -25,7 +25,7 @@ contract StakingRewardsFactory is Ownable {
         address _rewardsToken,
         uint _stakingRewardsGenesis
     ) Ownable() public {
-        require(_stakingRewardsGenesis >= block.timestamp, "StakingRewardsFactory::constructor: genesis too soon");
+        require(_stakingRewardsGenesis >= block.timestamp, 'StakingRewardsFactory::constructor: genesis too soon');
 
         rewardsToken = _rewardsToken;
         stakingRewardsGenesis = _stakingRewardsGenesis;
@@ -42,16 +42,13 @@ contract StakingRewardsFactory is Ownable {
         info.stakingRewards = address(new StakingRewards(/*_owner=*/ address(0), /*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken));
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
-
-        // collect the reward amount from the sender to be distributed after genesis
-        IERC20(rewardsToken).transferFrom(msg.sender, address(this), rewardAmount);
     }
 
     ///// permissionless functions
 
     // call notifyRewardAmount for all staking tokens.
     function notifyRewardAmounts() public {
-        require(block.timestamp >= stakingRewardsGenesis, "StakingRewardsFactory::notifyRewardAmounts: not ready");
+        require(block.timestamp >= stakingRewardsGenesis, 'StakingRewardsFactory::notifyRewardAmounts: not ready');
 
         for (uint i = 0; i < stakingTokens.length; i++) {
             notifyRewardAmount(stakingTokens[i]);
@@ -61,16 +58,19 @@ contract StakingRewardsFactory is Ownable {
     // notify reward amount for an individual staking token.
     // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
     function notifyRewardAmount(address stakingToken) public {
-        require(block.timestamp >= stakingRewardsGenesis, "StakingRewardsFactory::notifyRewardAmount: not ready");
+        require(block.timestamp >= stakingRewardsGenesis, 'StakingRewardsFactory::notifyRewardAmount: not ready');
 
         StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
-        require(info.stakingRewards != address(0), "StakingRewardsFactory::notifyRewardAmount: not deployed");
+        require(info.stakingRewards != address(0), 'StakingRewardsFactory::notifyRewardAmount: not deployed');
 
         if (info.rewardAmount > 0) {
             uint rewardAmount = info.rewardAmount;
             info.rewardAmount = 0;
 
-            IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount);
+            require(
+                IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount),
+                'StakingRewardsFactory::notifyRewardAmount: transfer failed'
+            );
             StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
         }
     }
