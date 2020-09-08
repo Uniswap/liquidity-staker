@@ -5,6 +5,8 @@ import { solidity, MockProvider, createFixtureLoader } from 'ethereum-waffle'
 import { stakingRewardsFactoryFixture } from './fixtures'
 import { mineBlock } from './utils'
 
+import StakingRewards from '../build/StakingRewards.json'
+
 chai.use(solidity)
 
 describe('StakingRewardsFactory', () => {
@@ -35,7 +37,41 @@ describe('StakingRewardsFactory', () => {
 
   it('deployment gas', async () => {
     const receipt = await provider.getTransactionReceipt(stakingRewardsFactory.deployTransaction.hash)
-    expect(receipt.gasUsed).to.eq('1914571')
+    expect(receipt.gasUsed).to.eq('1914559')
+  })
+
+  describe('#deploy', () => {
+    it('pushes the token into the list', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      expect(await stakingRewardsFactory.stakingTokens(0)).to.eq(stakingTokens[1].address)
+    })
+
+    it('fails if called twice for same token', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      await expect(stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)).to.revertedWith(
+        'StakingRewardsFactory::deploy: already deployed'
+      )
+    })
+
+    it('stores the address of stakingRewards and reward amount', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      const [stakingRewards, rewardAmount] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(
+        stakingTokens[1].address
+      )
+      expect(await provider.getCode(stakingRewards)).to.not.eq('0x')
+      expect(rewardAmount).to.eq(10000)
+    })
+
+    it('deployed staking rewards has correct parameters', async () => {
+      await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
+      const [stakingRewardsAddress] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(
+        stakingTokens[1].address
+      )
+      const stakingRewards = new Contract(stakingRewardsAddress, StakingRewards.abi, provider)
+      expect(await stakingRewards.rewardsDistribution()).to.eq(stakingRewardsFactory.address)
+      expect(await stakingRewards.stakingToken()).to.eq(stakingTokens[1].address)
+      expect(await stakingRewards.rewardsToken()).to.eq(rewardsToken.address)
+    })
   })
 
   describe('#notifyRewardsAmounts', () => {
