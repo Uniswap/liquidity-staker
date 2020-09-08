@@ -88,9 +88,15 @@ describe('StakingRewardsFactory', () => {
     })
 
     describe('after deploying all staking reward contracts', async () => {
+      let stakingRewards: Contract[]
       beforeEach('deploy staking reward contracts', async () => {
+        stakingRewards = []
         for (let i = 0; i < stakingTokens.length; i++) {
           await stakingRewardsFactory.deploy(stakingTokens[i].address, rewardAmounts[i])
+          const [stakingRewardsAddress] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(
+            stakingTokens[i].address
+          )
+          stakingRewards.push(new Contract(stakingRewardsAddress, StakingRewards.abi, provider))
         }
       })
 
@@ -114,6 +120,20 @@ describe('StakingRewardsFactory', () => {
         await expect(stakingRewardsFactory.notifyRewardAmounts()).to.be.revertedWith(
           'SafeMath: subtraction overflow' // emitted from rewards token
         )
+      })
+
+      it('calls notifyRewards on each contract', async () => {
+        await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+        await mineBlock(provider, genesis)
+        await expect(stakingRewardsFactory.notifyRewardAmounts())
+          .to.emit(stakingRewards[0], 'RewardAdded')
+          .withArgs(rewardAmounts[0])
+          .to.emit(stakingRewards[1], 'RewardAdded')
+          .withArgs(rewardAmounts[1])
+          .to.emit(stakingRewards[2], 'RewardAdded')
+          .withArgs(rewardAmounts[2])
+          .to.emit(stakingRewards[3], 'RewardAdded')
+          .withArgs(rewardAmounts[3])
       })
 
       it('succeeds when has sufficient balance and after genesis time', async () => {
