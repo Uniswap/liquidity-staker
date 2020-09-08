@@ -48,8 +48,6 @@ contract StakingRewardsFactory is Ownable {
 
     // call notifyRewardAmount for all staking tokens.
     function notifyRewardAmounts() public {
-        require(block.timestamp >= stakingRewardsGenesis, 'StakingRewardsFactory::notifyRewardAmounts: not ready');
-
         for (uint i = 0; i < stakingTokens.length; i++) {
             notifyRewardAmount(stakingTokens[i]);
         }
