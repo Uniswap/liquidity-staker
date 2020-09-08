@@ -33,12 +33,11 @@ describe('StakingRewards', () => {
   it('deploy cost', async () => {
     const stakingRewards = await deployContract(wallet, StakingRewards, [
       wallet.address,
-      wallet.address,
       rewardsToken.address,
       stakingToken.address,
     ])
     const receipt = await provider.getTransactionReceipt(stakingRewards.deployTransaction.hash)
-    expect(receipt.gasUsed).to.eq('1910559')
+    expect(receipt.gasUsed).to.eq('1252208')
   })
 
   it('rewardsDuration', async () => {

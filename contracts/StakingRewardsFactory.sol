@@ -10,9 +10,10 @@ contract StakingRewardsFactory is Ownable {
     address public rewardsToken;
     uint public stakingRewardsGenesis;
 
-    // the staking tokens
+    // the staking tokens for which the rewards contract has been deployed
     address[] public stakingTokens;
 
+    // info about rewards for a particular staking token
     struct StakingRewardsInfo {
         address stakingRewards;
         uint rewardAmount;
@@ -39,7 +40,7 @@ contract StakingRewardsFactory is Ownable {
         StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
         require(info.stakingRewards == address(0), 'StakingRewardsFactory::deploy: already deployed');
 
-        info.stakingRewards = address(new StakingRewards(/*_owner=*/ address(0), /*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken));
+        info.stakingRewards = address(new StakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken));
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
     }
@@ -48,6 +49,7 @@ contract StakingRewardsFactory is Ownable {
 
     // call notifyRewardAmount for all staking tokens.
     function notifyRewardAmounts() public {
+        require(stakingTokens.length > 0, 'StakingRewardsFactory::notifyRewardAmounts: called before any deploys');
         for (uint i = 0; i < stakingTokens.length; i++) {
             notifyRewardAmount(stakingTokens[i]);
         }
