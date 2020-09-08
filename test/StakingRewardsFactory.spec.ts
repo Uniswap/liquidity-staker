@@ -136,6 +136,29 @@ describe('StakingRewardsFactory', () => {
           .withArgs(rewardAmounts[3])
       })
 
+      it('transfers the reward tokens to the individual contracts', async () => {
+        await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+        await mineBlock(provider, genesis)
+        await stakingRewardsFactory.notifyRewardAmounts()
+        for (let i = 0; i < rewardAmounts.length; i++) {
+          expect(await rewardsToken.balanceOf(stakingRewards[i].address)).to.eq(rewardAmounts[i])
+        }
+      })
+
+      it('sets rewardAmount to 0', async () => {
+        await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
+        await mineBlock(provider, genesis)
+        for (let i = 0; i < stakingTokens.length; i++) {
+          const [, amount] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(stakingTokens[i].address)
+          expect(amount).to.eq(rewardAmounts[i])
+        }
+        await stakingRewardsFactory.notifyRewardAmounts()
+        for (let i = 0; i < stakingTokens.length; i++) {
+          const [, amount] = await stakingRewardsFactory.stakingRewardsInfoByStakingToken(stakingTokens[i].address)
+          expect(amount).to.eq(0)
+        }
+      })
+
       it('succeeds when has sufficient balance and after genesis time', async () => {
         await rewardsToken.transfer(stakingRewardsFactory.address, totalRewardAmount)
         await mineBlock(provider, genesis)
