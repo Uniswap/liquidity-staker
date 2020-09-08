@@ -17,7 +17,7 @@ describe('StakingRewardsFactory', () => {
       gasLimit: 9999999,
     },
   })
-  const [wallet] = provider.getWallets()
+  const [wallet, wallet1] = provider.getWallets()
   const loadFixture = createFixtureLoader([wallet], provider)
 
   let rewardsToken: Contract
@@ -50,6 +50,12 @@ describe('StakingRewardsFactory', () => {
       await stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)
       await expect(stakingRewardsFactory.deploy(stakingTokens[1].address, 10000)).to.revertedWith(
         'StakingRewardsFactory::deploy: already deployed'
+      )
+    })
+
+    it('can only be called by the owner', async () => {
+      await expect(stakingRewardsFactory.connect(wallet1).deploy(stakingTokens[1].address, 10000)).to.be.revertedWith(
+        'Ownable: caller is not the owner'
       )
     })
 
