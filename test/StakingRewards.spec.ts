@@ -1,9 +1,10 @@
 import chai, { expect } from 'chai'
-import { Contract, BigNumber } from 'ethers'
+import { Contract, BigNumber, constants } from 'ethers'
 import { solidity, MockProvider, createFixtureLoader, deployContract } from 'ethereum-waffle'
+import { ecsign } from 'ethereumjs-util'
 
 import { stakingRewardsFixture } from './fixtures'
-import { REWARDS_DURATION, expandTo18Decimals, mineBlock } from './utils'
+import { REWARDS_DURATION, expandTo18Decimals, mineBlock, getApprovalDigest } from './utils'
 
 import StakingRewards from '../build/StakingRewards.json'
 
@@ -37,7 +38,7 @@ describe('StakingRewards', () => {
       stakingToken.address,
     ])
     const receipt = await provider.getTransactionReceipt(stakingRewards.deployTransaction.hash)
-    expect(receipt.gasUsed).to.eq('1252208')
+    expect(receipt.gasUsed).to.eq('1418436')
   })
 
   it('rewardsDuration', async () => {
@@ -64,6 +65,39 @@ describe('StakingRewards', () => {
     await stakingToken.transfer(staker.address, stake)
     await stakingToken.connect(staker).approve(stakingRewards.address, stake)
     await stakingRewards.connect(staker).stake(stake)
+
+    const { endTime } = await start(reward)
+
+    // fast-forward past the reward window
+    await mineBlock(provider, endTime.add(1).toNumber())
+
+    // unstake
+    await stakingRewards.connect(staker).exit()
+    const stakeEndTime: BigNumber = await stakingRewards.lastUpdateTime()
+    expect(stakeEndTime).to.be.eq(endTime)
+
+    const rewardAmount = await rewardsToken.balanceOf(staker.address)
+    expect(reward.sub(rewardAmount).lte(reward.div(10000))).to.be.true // ensure result is within .01%
+    expect(rewardAmount).to.be.eq(reward.div(REWARDS_DURATION).mul(REWARDS_DURATION))
+  })
+
+  it('stakeWithPermit', async () => {
+    // stake with staker
+    const stake = expandTo18Decimals(2)
+    await stakingToken.transfer(staker.address, stake)
+
+    // get permit
+    const nonce = await stakingToken.nonces(staker.address)
+    const deadline = constants.MaxUint256
+    const digest = await getApprovalDigest(
+      stakingToken,
+      { owner: staker.address, spender: stakingRewards.address, value: stake },
+      nonce,
+      deadline
+    )
+    const { v, r, s } = ecsign(Buffer.from(digest.slice(2), 'hex'), Buffer.from(staker.privateKey.slice(2), 'hex'))
+
+    await stakingRewards.connect(staker).stakeWithPermit(stake, deadline, v, r, s)
 
     const { endTime } = await start(reward)
 
